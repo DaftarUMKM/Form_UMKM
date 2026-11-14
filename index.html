@@ -1,0 +1,200 @@
+<!doctype html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Daftarkan Usaha Anda – Peta UMKM Aceh Singkil</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.css">
+<style>
+:root{--bg:#f6f7f9;--surface:#fff;--ink:#14213d;--muted:#5b6475;--line:#d7dce5;--accent:#0b6e4f;--accent-ink:#fff;--bad:#b42318;--ok:#067647;color-scheme:light dark}
+@media (prefers-color-scheme:dark){:root{--bg:#0f141b;--surface:#18202b;--ink:#e8edf5;--muted:#9aa6b8;--line:#2b3646;--accent:#3ecf9a;--accent-ink:#06281c;--bad:#ff8a80;--ok:#5fe3a8}}
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.5 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+main{max-width:640px;margin:0 auto;padding:20px 16px 48px}
+h1{font-size:22px;margin:0 0 4px}
+p.lead{margin:0 0 16px;color:var(--muted)}
+form{display:grid;gap:16px}
+.f{display:grid;gap:6px}
+label,.lab{font-weight:600;font-size:14px}
+.opt{font-weight:400;color:var(--muted)}
+input[type=text],input[type=tel],select{width:100%;min-height:44px;padding:8px 12px;border:1px solid var(--line);border-radius:8px;background:var(--surface);color:var(--ink);font:inherit}
+input:focus-visible,select:focus-visible,button:focus-visible{outline:3px solid var(--accent);outline-offset:1px}
+.hint{font-size:13px;color:var(--muted)}
+#map{height:300px;border:1px solid var(--line);border-radius:8px;z-index:0}
+.row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+button{min-height:44px;padding:8px 16px;border-radius:8px;border:1px solid var(--line);background:var(--surface);color:var(--ink);font:inherit;font-weight:600;cursor:pointer}
+button.primary{background:var(--accent);color:var(--accent-ink);border-color:var(--accent);width:100%;font-size:17px}
+button:disabled{opacity:.55;cursor:default}
+#coord{font:14px ui-monospace,Menlo,Consolas,monospace;color:var(--muted)}
+.chk{display:flex;gap:10px;align-items:flex-start;font-weight:400}
+.chk input{width:22px;height:22px;margin-top:2px;flex:none;accent-color:var(--accent)}
+#preview{max-width:200px;max-height:200px;border-radius:8px;display:none;border:1px solid var(--line)}
+.msg{padding:12px 14px;border-radius:8px;border:1px solid var(--line);background:var(--surface);display:none}
+.msg.err{display:block;border-color:var(--bad);color:var(--bad)}
+.msg.okk{display:block;border-color:var(--ok);color:var(--ok)}
+.warn{display:block;border-color:#b54708;color:#b54708}
+.hp{position:absolute;left:-9999px;width:1px;height:1px;overflow:hidden}
+a{color:var(--accent)}
+</style>
+</head>
+<body>
+<main>
+  <h1>Daftarkan usaha Anda di Peta UMKM</h1>
+  <p class="lead">Isi data usaha Anda. Setelah diperiksa admin, usaha Anda akan tampil di peta. Gratis.</p>
+  <div id="cfgwarn" class="msg warn" role="alert" hidden>Formulir belum terhubung ke Google Sheets. Isi <code>APPS_SCRIPT_URL</code> di berkas ini (lihat PETUNJUK.txt).</div>
+
+  <form id="f" novalidate>
+    <div class="f">
+      <label for="nama">Nama usaha</label>
+      <input id="nama" type="text" maxlength="100" autocomplete="organization" required>
+    </div>
+    <div class="f">
+      <label for="sektor">Sektor usaha</label>
+      <select id="sektor" required><option value="">Pilih sektor…</option></select>
+    </div>
+    <div class="f">
+      <label for="jenis">Jenis usaha <span class="opt">(boleh dikosongkan)</span></label>
+      <input id="jenis" type="text" maxlength="80" placeholder="Contoh: warung makan, bengkel, tangkap ikan">
+    </div>
+    <div class="f">
+      <label for="alamat">Alamat atau nama desa <span class="opt">(boleh dikosongkan)</span></label>
+      <input id="alamat" type="text" maxlength="200" autocomplete="street-address">
+    </div>
+    <div class="f">
+      <label for="tel">Nomor WhatsApp <span class="opt">(boleh dikosongkan)</span></label>
+      <input id="tel" type="tel" inputmode="tel" maxlength="20" placeholder="08xxxxxxxxxx" autocomplete="tel">
+      <span class="hint">Nomor ini akan ditampilkan di peta bila Anda mengisinya.</span>
+    </div>
+
+    <div class="f">
+      <span class="lab" id="loclab">Lokasi usaha</span>
+      <div class="row">
+        <button type="button" id="gps">Pakai lokasi saya sekarang</button>
+        <span id="coord">Belum dipilih</span>
+      </div>
+      <div id="map" role="application" aria-labelledby="loclab"></div>
+      <span class="hint">Atau ketuk peta untuk menaruh penanda, lalu geser penanda ke posisi yang tepat. Perbesar peta supaya lebih akurat.</span>
+    </div>
+
+    <div class="f">
+      <label for="foto">Foto usaha <span class="opt">(boleh dikosongkan)</span></label>
+      <div class="row">
+        <button type="button" id="fotocam">Ambil foto sekarang</button>
+        <button type="button" id="fotogal">Pilih dari galeri</button>
+        <button type="button" id="fotohapus" hidden>Hapus foto</button>
+      </div>
+      <input id="foto" type="file" accept="image/*" capture="environment" class="hp" tabindex="-1" aria-hidden="true">
+      <input id="fotog" type="file" accept="image/*" class="hp" tabindex="-1" aria-hidden="true">
+      <img id="preview" alt="Pratinjau foto usaha">
+      <span class="hint">Foto akan diperkecil otomatis. Di HP, tombol pertama langsung membuka kamera.</span>
+    </div>
+
+    <label class="chk"><input type="checkbox" id="setuju" required> <span>Saya pemilik atau berwenang atas usaha ini dan setuju data di atas (termasuk nomor WhatsApp bila diisi) ditampilkan di peta umum.</span></label>
+
+    <div class="hp" aria-hidden="true"><label>Situs web <input id="website" type="text" tabindex="-1" autocomplete="off"></label></div>
+
+    <div id="msg" class="msg" role="status" aria-live="polite"></div>
+    <button type="submit" class="primary" id="kirim">Kirim data usaha</button>
+  </form>
+</main>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script>
+(function () {
+  "use strict";
+  /* Isi dengan alamat "Aplikasi web" dari Apps Script (berakhiran /exec). */
+  var APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbxfe9LQfAnl4oPWkvT_DCI9dZF8JX8uZEEsiDrf4qcLzeaioOUPAsvzT9WOZGYXEgCLvg/exec";
+
+  var SECTORS = ["Kuliner", "Perdagangan", "Pertanian & Perkebunan", "Perikanan", "Peternakan", "Kerajinan & Industri Rumahan", "Jasa", "Pariwisata & Penginapan", "Lainnya"];
+  var BOX = { lat0: 2.0, lat1: 2.7, lng0: 97.0, lng1: 98.3 };
+  function $(id) { return document.getElementById(id); }
+  var sel = $("sektor");
+  SECTORS.forEach(function (s) { var o = document.createElement("option"); o.value = s; o.textContent = s; sel.appendChild(o); });
+  if (!APPS_SCRIPT_URL) $("cfgwarn").hidden = false;
+
+  var pos = null, marker = null, photo = "", busy = false, map = null;
+  function show(t, cls) { var m = $("msg"); m.className = "msg " + (cls || ""); m.textContent = t; if (!t) m.className = "msg"; }
+  function inBox(la, ln) { return la > BOX.lat0 && la < BOX.lat1 && ln > BOX.lng0 && ln < BOX.lng1; }
+  function setPos(la, ln, fly) {
+    pos = { lat: la, lng: ln };
+    $("coord").textContent = la.toFixed(6) + ", " + ln.toFixed(6);
+    if (!map) return;
+    if (!marker) {
+      marker = L.marker([la, ln], { draggable: true }).addTo(map);
+      marker.on("dragend", function () { var p = marker.getLatLng(); setPos(p.lat, p.lng, false); });
+    } else marker.setLatLng([la, ln]);
+    if (fly) map.setView([la, ln], Math.max(map.getZoom(), 17));
+  }
+
+  if (window.L) {
+    map = L.map("map", { center: [2.35, 97.85], zoom: 9 });
+    L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", { maxZoom: 19, attribution: "© OpenStreetMap contributors" }).addTo(map);
+    map.on("click", function (e) { setPos(e.latlng.lat, e.latlng.lng, false); });
+  } else {
+    $("map").textContent = "Peta tidak bisa dimuat. Gunakan tombol lokasi di atas.";
+  }
+
+  $("gps").addEventListener("click", function () {
+    if (!navigator.geolocation) { show("Perangkat ini tidak mendukung lokasi. Ketuk peta saja.", "err"); return; }
+    show("Mencari lokasi Anda…", "");
+    navigator.geolocation.getCurrentPosition(function (p) {
+      show("", "");
+      setPos(p.coords.latitude, p.coords.longitude, true);
+    }, function () { show("Lokasi tidak bisa diambil. Izinkan akses lokasi, atau ketuk peta untuk memilih.", "err"); }, { enableHighAccuracy: true, timeout: 20000, maximumAge: 0 });
+  });
+
+  $("fotocam").addEventListener("click", function () { $("foto").click(); });
+  $("fotogal").addEventListener("click", function () { $("fotog").click(); });
+  $("fotohapus").addEventListener("click", function () {
+    photo = ""; $("foto").value = ""; $("fotog").value = ""; $("preview").style.display = "none"; $("fotohapus").hidden = true;
+  });
+  function onPhoto() {
+    var f = this.files && this.files[0];
+    if (!f) return;
+    photo = ""; $("preview").style.display = "none";
+    if (!/^image\//.test(f.type)) { show("Berkas harus berupa gambar.", "err"); this.value = ""; return; }
+    var url = URL.createObjectURL(f), img = new Image();
+    img.onload = function () {
+      var max = 1000, k = Math.min(1, max / Math.max(img.width, img.height));
+      var c = document.createElement("canvas"); c.width = Math.round(img.width * k); c.height = Math.round(img.height * k);
+      c.getContext("2d").drawImage(img, 0, 0, c.width, c.height);
+      photo = c.toDataURL("image/jpeg", 0.8);
+      URL.revokeObjectURL(url);
+      $("preview").src = photo; $("preview").style.display = "block"; $("fotohapus").hidden = false;
+    };
+    img.onerror = function () { show("Foto tidak bisa dibaca. Coba foto lain.", "err"); };
+    img.src = url;
+  }
+  $("foto").addEventListener("change", onPhoto);
+  $("fotog").addEventListener("change", onPhoto);
+
+  $("f").addEventListener("submit", function (e) {
+    e.preventDefault();
+    if (busy) return;
+    var nama = $("nama").value.trim();
+    if (nama.length < 2) { show("Isi nama usaha.", "err"); $("nama").focus(); return; }
+    if (!sel.value) { show("Pilih sektor usaha.", "err"); sel.focus(); return; }
+    if (!pos) { show("Tentukan lokasi usaha: tekan tombol lokasi atau ketuk peta.", "err"); $("gps").focus(); return; }
+    if (!inBox(pos.lat, pos.lng)) { show("Lokasi di luar wilayah Aceh Singkil. Periksa kembali penandanya.", "err"); return; }
+    if (!$("setuju").checked) { show("Centang pernyataan persetujuan di bagian bawah.", "err"); $("setuju").focus(); return; }
+    if (!APPS_SCRIPT_URL) { show("Formulir belum terhubung ke penampung data.", "err"); return; }
+    busy = true; $("kirim").disabled = true; show("Mengirim…", "");
+    var body = JSON.stringify({
+      nama: nama, sektor: sel.value, jenis_usaha: $("jenis").value.trim(), alamat: $("alamat").value.trim(), telepon: $("tel").value.trim(),
+      latitude: pos.lat, longitude: pos.lng, foto: photo, setuju: true, website: $("website").value
+    });
+    fetch(APPS_SCRIPT_URL, { method: "POST", mode: "no-cors", headers: { "Content-Type": "text/plain;charset=utf-8" }, body: body }).then(function () {
+      $("f").reset(); photo = ""; $("preview").style.display = "none"; $("fotohapus").hidden = true; pos = null; $("coord").textContent = "Belum dipilih";
+      if (marker) { map.removeLayer(marker); marker = null; }
+      show("Terima kasih! Data usaha Anda sudah terkirim dan menunggu pemeriksaan admin. Usaha akan tampil di peta setelah disetujui.", "okk");
+      busy = false; $("kirim").disabled = false;
+    }).catch(function () {
+      show("Pengiriman gagal. Periksa sambungan internet lalu coba lagi.", "err");
+      busy = false; $("kirim").disabled = false;
+    });
+  });
+})();
+</script>
+</body>
+</html>
